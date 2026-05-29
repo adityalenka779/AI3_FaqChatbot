@@ -1,7 +1,13 @@
-from langchain.chains import RetrievalQA
-from langchain.prompts import PromptTemplate
-from agents.base import get_gemini
+import os
+from langchain_core.prompts import PromptTemplate
+from langchain_core.output_parsers import StrOutputParser
+from langchain_core.runnables import RunnablePassthrough
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_groq import ChatGroq
 from agents.vector_store import load_store
+from dotenv import load_dotenv
+
+load_dotenv()
 
 SYSTEM_PROMPT = """You are a school information assistant for KALNET School.
 You ONLY answer questions using the provided school documents below.
@@ -16,30 +22,50 @@ Question: {question}
 
 Answer:"""
 
-prompt = PromptTemplate(
-    template=SYSTEM_PROMPT,
-    input_variables=["context", "question"]
-)
+prompt = PromptTemplate(template=SYSTEM_PROMPT, input_variables=["context", "question"])
 
-def get_faq_chain():
-    llm = get_gemini()
-    store = load_store()
-    retriever = store.as_retriever(search_kwargs={"k": 4})
-    chain = RetrievalQA.from_chain_type(
-        llm=llm,
-        retriever=retriever,
-        chain_type="stuff",
-        chain_type_kwargs={"prompt": prompt},
-        return_source_documents=True
+
+# def get_llm():
+#     return ChatGoogleGenerativeAI(
+#         model="gemini-1.5-flash-latest",
+#         google_api_key=os.getenv("GEMINI_API_KEY"),
+#         temperature=0.1,
+#     )
+
+
+def get_llm():
+    return ChatGroq(
+        model="llama-3.3-70b-versatile",
+        api_key=os.getenv("GROQ_API_KEY"),
+        temperature=0.1,
     )
-    return chain
+
+
+def format_docs(docs):
+    return "\n\n".join(
+        [
+            f"[Source: {doc.metadata.get('source_file', 'unknown')}]\n{doc.page_content}"
+            for doc in docs
+        ]
+    )
+
 
 def chat_with_bot(question: str, conversation_history: list = []):
-    chain = get_faq_chain()
-    result = chain.invoke({"query": question})
-    answer = result["result"]
-    sources = list(set([
-        doc.metadata.get("source_file", "unknown")
-        for doc in result["source_documents"]
-    ]))
+    llm = get_llm()
+    store = load_store()
+    retriever = store.as_retriever(search_kwargs={"k": 4})
+
+    chain = (
+        {"context": retriever | format_docs, "question": RunnablePassthrough()}
+        | prompt
+        | llm
+        | StrOutputParser()
+    )
+
+    retrieved_docs = retriever.invoke(question)
+    sources = list(
+        set([doc.metadata.get("source_file", "unknown") for doc in retrieved_docs])
+    )
+
+    answer = chain.invoke(question)
     return {"answer": answer, "sources": sources}
