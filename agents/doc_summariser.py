@@ -4,18 +4,21 @@ import fitz
 from docx import Document as DocxDocument
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_google_genai import ChatGoogleGenerativeAI
-from agents.base import get_gemini
+from langchain_groq import ChatGroq
 from dotenv import load_dotenv
 
 load_dotenv()
+
 
 def extract_text_from_pdf(file_path: str) -> str:
     doc = fitz.open(file_path)
     return "\n".join([page.get_text() for page in doc])
 
+
 def extract_text_from_docx(file_path: str) -> str:
     doc = DocxDocument(file_path)
     return "\n".join([para.text for para in doc.paragraphs])
+
 
 def extract_text(file_path: str) -> str:
     if file_path.endswith(".pdf"):
@@ -25,32 +28,48 @@ def extract_text(file_path: str) -> str:
     else:
         raise ValueError("Only PDF and DOCX files are supported.")
 
-SUMMARY_PROMPT = """You are a document analysis assistant for a school administrator.
-Analyse the document text below and respond ONLY with a JSON object.
-No preamble, no markdown, no explanation — just the JSON.
 
-Return this exact JSON structure:
+SUMMARY_PROMPT = """You are a document analysis assistant for a school administrator.
+Analyse the document text below and respond ONLY with a valid JSON object.
+No preamble, no markdown, no explanation, no code blocks — just raw JSON.
+
+Return exactly this structure:
 {{
   "title_guess": "your best guess at the document title",
   "summary_bullets": ["bullet 1", "bullet 2", "bullet 3"],
   "key_dates": ["date 1 with context", "date 2 with context"],
-  "action_required": true,
-  "action_description": "what action must be taken, or null if none"
+  "action_required": false,
+  "action_description": null
 }}
 
 Document text:
 {text}"""
+
+
+# def get_llm():
+#     return ChatGoogleGenerativeAI(
+#         model="gemini-1.5-flash-latest",
+#         google_api_key=os.getenv("GEMINI_API_KEY"),
+#         temperature=0.1,
+#     )
+
+
+def get_llm():
+    return ChatGroq(
+        model="llama-3.3-70b-versatile",
+        api_key=os.getenv("GROQ_API_KEY"),
+        temperature=0.1,
+    )
+
 
 def summarise_document(file_path: str) -> dict:
     text = extract_text(file_path)
     word_count = len(text.split())
 
     if word_count > 3000:
-        splitter = RecursiveCharacterTextSplitter(
-            chunk_size=2000, chunk_overlap=200
-        )
+        splitter = RecursiveCharacterTextSplitter(chunk_size=2000, chunk_overlap=200)
         chunks = splitter.split_text(text)
-        llm = get_gemini()
+        llm = get_llm()
         chunk_summaries = []
         for chunk in chunks:
             response = llm.invoke(
@@ -61,12 +80,15 @@ def summarise_document(file_path: str) -> dict:
     else:
         combined = text
 
-    llm = ChatGoogleGenerativeAI(
-        model="gemini-1.5-flash",
-        google_api_key=os.getenv("GEMINI_API_KEY"),
-        temperature=0.1,
-        generation_config={"response_mime_type": "application/json"}
-    )
+    llm = get_llm()
     prompt = SUMMARY_PROMPT.format(text=combined)
     response = llm.invoke(prompt)
-    return json.loads(response.content)
+
+    raw = response.content.strip()
+    if raw.startswith("```"):
+        raw = raw.split("```")[1]
+        if raw.startswith("json"):
+            raw = raw[4:]
+    raw = raw.strip()
+
+    return json.loads(raw)
