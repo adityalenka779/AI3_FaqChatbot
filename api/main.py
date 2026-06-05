@@ -26,13 +26,26 @@ from agents.faq_bot import chat_with_bot
 from agents.doc_summariser import summarise_document
 from agents.vector_store import load_store
 
+# @app.on_event("startup")
+# def startup():
+#     try:
+#         app.state.vector_store = load_store()
+#         print("FAISS vector store loaded successfully.")
+#     except Exception as e:
+#         print(f"Warning: Could not load FAISS store: {e}")
+
 @app.on_event("startup")
 def startup():
+    print("Startup beginning...")
+
     try:
         app.state.vector_store = load_store()
         print("FAISS vector store loaded successfully.")
     except Exception as e:
         print(f"Warning: Could not load FAISS store: {e}")
+
+    print("Startup complete.")
+
 
 class FAQRequest(BaseModel):
     question: str
