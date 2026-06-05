@@ -1,14 +1,20 @@
-.env
-.venv/
+# Virtual environment — never push this
+kalvenv/
 venv/
+env/
+.venv/
+
+# Secrets
+.env
+
+# Python cache
 __pycache__/
 *.pyc
-.DS_Store
-node_modules/
-dist/
-build/
-*.egg-info/
-.pytest_cache/
-.mypy_cache/
+*.pyo
+*.pyd
+.Python
 
+# OS
+.DS_Store
+Thumbs.db
 
