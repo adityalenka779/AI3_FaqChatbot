@@ -31,13 +31,15 @@ _store_ready = False
 
 def _load_store_background():
     global _store_ready
+    import traceback
     try:
         print("Loading FAISS store in background...")
         load_store()
         _store_ready = True
-        print("FAISS vector store loaded successfully.")
+        print("FAISS vector store loaded and ready.")
     except Exception as e:
-        print(f"Warning: Could not load FAISS store: {e}")
+        print(f"ERROR loading FAISS store: {e}")
+        traceback.print_exc()
 
 @app.on_event("startup")
 def startup():
