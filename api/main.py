@@ -6,7 +6,6 @@ from pydantic import BaseModel
 from typing import List
 import tempfile
 import os
-import threading
 from pathlib import Path
 
 TEMPLATES = Path(__file__).parent.parent / "templates"
@@ -27,26 +26,14 @@ from agents.faq_bot import chat_with_bot
 from agents.doc_summariser import summarise_document
 from agents.vector_store import load_store
 
-# Global store — loaded in background after startup
-_vector_store = None
-_store_ready = False
-
-def _load_store_background():
-    global _vector_store, _store_ready
-    try:
-        print("Background: loading FAISS vector store...")
-        _vector_store = load_store()
-        _store_ready = True
-        print("Background: FAISS vector store loaded successfully.")
-    except Exception as e:
-        print(f"Background: Failed to load FAISS store: {e}")
-
 @app.on_event("startup")
 def startup():
-    # Start loading in background so port opens immediately
-    t = threading.Thread(target=_load_store_background, daemon=True)
-    t.start()
-    print("Startup complete. Vector store loading in background.")
+    """Load FAISS store and embeddings ONCE at startup into the singleton."""
+    try:
+        load_store()
+        print("FAISS vector store loaded successfully.")
+    except Exception as e:
+        print(f"Warning: Could not load FAISS store at startup: {e}")
 
 class FAQRequest(BaseModel):
     question: str
@@ -70,15 +57,10 @@ def summarise_page():
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "vector_store_ready": _store_ready}
+    return {"status": "ok"}
 
 @app.post("/ai/faq", response_model=FAQResponse)
 def faq_endpoint(req: FAQRequest):
-    if not _store_ready:
-        return FAQResponse(
-            answer="The knowledge base is still loading, please wait 30 seconds and try again.",
-            sources=[]
-        )
     result = chat_with_bot(req.question, req.history)
     return FAQResponse(answer=result["answer"], sources=result["sources"])
 
@@ -93,4 +75,6 @@ async def summarise_endpoint(file: UploadFile = File(...)):
     finally:
         os.unlink(tmp_path)
     return result
+
+
 

@@ -2,7 +2,6 @@ import os
 from langchain_core.prompts import PromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import RunnablePassthrough
-from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_groq import ChatGroq
 from agents.vector_store import load_store
 from dotenv import load_dotenv
@@ -22,50 +21,52 @@ Question: {question}
 
 Answer:"""
 
-prompt = PromptTemplate(template=SYSTEM_PROMPT, input_variables=["context", "question"])
+prompt = PromptTemplate(
+    template=SYSTEM_PROMPT,
+    input_variables=["context", "question"]
+)
 
-
-# def get_llm():
-#     return ChatGoogleGenerativeAI(
-#         model="gemini-1.5-flash-latest",
-#         google_api_key=os.getenv("GEMINI_API_KEY"),
-#         temperature=0.1,
-#     )
-
+# Module-level LLM singleton — instantiated once, not per request
+_llm = None
 
 def get_llm():
-    return ChatGroq(
-        model="llama-3.3-70b-versatile",
-        api_key=os.getenv("GROQ_API_KEY"),
-        temperature=0.1,
-    )
-
+    global _llm
+    if _llm is None:
+        _llm = ChatGroq(
+            model="llama-3.3-70b-versatile",
+            api_key=os.getenv("GROQ_API_KEY"),
+            temperature=0.1,
+        )
+    return _llm
 
 def format_docs(docs):
-    return "\n\n".join(
-        [
-            f"[Source: {doc.metadata.get('source_file', 'unknown')}]\n{doc.page_content}"
-            for doc in docs
-        ]
-    )
-
+    return "\n\n".join([
+        f"[Source: {doc.metadata.get('source_file', 'unknown')}]\n{doc.page_content}"
+        for doc in docs
+    ])
 
 def chat_with_bot(question: str, conversation_history: list = []):
     llm = get_llm()
-    store = load_store()
+    store = load_store()  # now returns singleton, no reload
     retriever = store.as_retriever(search_kwargs={"k": 4})
 
     chain = (
-        {"context": retriever | format_docs, "question": RunnablePassthrough()}
+        {
+            "context": retriever | format_docs,
+            "question": RunnablePassthrough()
+        }
         | prompt
         | llm
         | StrOutputParser()
     )
 
     retrieved_docs = retriever.invoke(question)
-    sources = list(
-        set([doc.metadata.get("source_file", "unknown") for doc in retrieved_docs])
-    )
+    sources = list(set([
+        doc.metadata.get("source_file", "unknown")
+        for doc in retrieved_docs
+    ]))
 
     answer = chain.invoke(question)
     return {"answer": answer, "sources": sources}
+
+

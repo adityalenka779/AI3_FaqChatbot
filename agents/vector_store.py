@@ -1,25 +1,25 @@
 import os
-from pathlib import Path
 from langchain_community.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings
 
+# Switched to a much lighter model (~30MB vs ~400MB) — fits Render's 512MB free tier
 EMBED_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 
-# Absolute path — works both locally and on Render
-BASE_DIR = Path(__file__).parent.parent
-DEFAULT_INDEX_PATH = str(BASE_DIR / "data" / "processed" / "faiss_index")
-
+# Module-level singleton — loaded once, reused across all requests
+_embeddings = None
+_store = None
 
 def get_embeddings():
-    print("Loading embeddings...")
-    embeddings = HuggingFaceEmbeddings(model_name=EMBED_MODEL)
-    print("Embeddings loaded.")
-    return embeddings
+    global _embeddings
+    if _embeddings is None:
+        _embeddings = HuggingFaceEmbeddings(
+            model_name=EMBED_MODEL,
+            model_kwargs={"device": "cpu"},
+            encode_kwargs={"normalize_embeddings": True}
+        )
+    return _embeddings
 
-
-def build_store(docs, save_path=None):
-    if save_path is None:
-        save_path = DEFAULT_INDEX_PATH
+def build_store(docs, save_path="data/processed/faiss_index"):
     os.makedirs(save_path, exist_ok=True)
     embeddings = get_embeddings()
     store = FAISS.from_documents(docs, embeddings)
@@ -27,19 +27,17 @@ def build_store(docs, save_path=None):
     print(f"FAISS index saved to {save_path}")
     return store
 
-
-def load_store(index_path=None):
-    if index_path is None:
-        index_path = DEFAULT_INDEX_PATH
-    print(f"Loading FAISS index from: {index_path}")
-    embeddings = get_embeddings()
-    store = FAISS.load_local(
-        index_path,
-        embeddings,
-        allow_dangerous_deserialization=True,
-    )
-    print("FAISS loaded.")
-    return store
+def load_store(index_path="data/processed/faiss_index"):
+    global _store
+    if _store is None:
+        embeddings = get_embeddings()
+        _store = FAISS.load_local(
+            index_path,
+            embeddings,
+            allow_dangerous_deserialization=True
+        )
+        print("FAISS store loaded into memory (singleton).")
+    return _store
 
 
 
