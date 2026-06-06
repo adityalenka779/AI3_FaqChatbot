@@ -1,13 +1,11 @@
 services:
   - type: web
-    name: kalnet-ai3
+    name: ai3-faqchatbot
     runtime: python
-    buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn api.main:app --host 0.0.0.0 --port $PORT
+    buildCommand: pip install --extra-index-url https://download.pytorch.org/whl/cpu -r requirements.txt
+    startCommand: python -m uvicorn api.main:app --host 0.0.0.0 --port $PORT
     envVars:
-      - key: GROQ_API_KEY
-        sync: false
-      - key: PYTHONUNBUFFERED
-        value: "1"
+      - key: PYTHON_VERSION
+        value: 3.11.0
 
 

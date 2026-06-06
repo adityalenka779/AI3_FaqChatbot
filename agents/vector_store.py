@@ -2,10 +2,9 @@ import os
 from langchain_community.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings
 
-# Switched to a much lighter model (~30MB vs ~400MB) — fits Render's 512MB free tier
+# all-MiniLM-L6-v2 is ~90MB with CPU-only torch — fits Render free tier
 EMBED_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 
-# Module-level singleton — loaded once, reused across all requests
 _embeddings = None
 _store = None
 
