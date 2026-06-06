@@ -25,15 +25,25 @@ app.add_middleware(
 from agents.faq_bot import chat_with_bot
 from agents.doc_summariser import summarise_document
 from agents.vector_store import load_store
+import threading
+
+_store_ready = False
+
+def _load_store_background():
+    global _store_ready
+    try:
+        print("Loading FAISS store in background...")
+        load_store()
+        _store_ready = True
+        print("FAISS vector store loaded successfully.")
+    except Exception as e:
+        print(f"Warning: Could not load FAISS store: {e}")
 
 @app.on_event("startup")
 def startup():
-    """Load FAISS store and embeddings ONCE at startup into the singleton."""
-    try:
-        load_store()
-        print("FAISS vector store loaded successfully.")
-    except Exception as e:
-        print(f"Warning: Could not load FAISS store at startup: {e}")
+    """Start background thread to load store — port binds immediately."""
+    t = threading.Thread(target=_load_store_background, daemon=True)
+    t.start()
 
 class FAQRequest(BaseModel):
     question: str
@@ -59,8 +69,17 @@ def summarise_page():
 def health():
     return {"status": "ok"}
 
+@app.get("/ready")
+def ready():
+    return {"store_ready": _store_ready}
+
 @app.post("/ai/faq", response_model=FAQResponse)
 def faq_endpoint(req: FAQRequest):
+    if not _store_ready:
+        return FAQResponse(
+            answer="The knowledge base is still loading, please wait 30 seconds and try again.",
+            sources=[]
+        )
     result = chat_with_bot(req.question, req.history)
     return FAQResponse(answer=result["answer"], sources=result["sources"])
 
@@ -75,6 +94,5 @@ async def summarise_endpoint(file: UploadFile = File(...)):
     finally:
         os.unlink(tmp_path)
     return result
-
 
 
