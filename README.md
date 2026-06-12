@@ -41,7 +41,7 @@ Instead of manually searching through lengthy PDFs, users can ask natural langua
 
 ### Application
 
-https://YOUR-RENDER-URL.onrender.com
+https://ai3-faqchatbot.onrender.com
 
 ### Pages
 
